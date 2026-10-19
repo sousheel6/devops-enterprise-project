@@ -17,7 +17,7 @@ pipeline {
 
         stage('Build Application Image') {
             steps {
-                bat '"C:\\Users\\soush\\AppData\\Local\\Programs\\DockerDesktop\\resources\\bin\\docker.exe" build -t ecommerce-api:1.0 .'
+                bat '"C:\\Users\\soush\\AppData\\Local\\Programs\\DockerDesktop\\resources\\bin\\docker.exe" build -f docker/Dockerfile -t ecommerce-api:1.0 .'
             }
         }
     }
