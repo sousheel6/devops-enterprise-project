@@ -20,5 +20,33 @@ pipeline {
                 bat '"C:\\Users\\soush\\AppData\\Local\\Programs\\DockerDesktop\\resources\\bin\\docker.exe" build -f docker/Dockerfile -t ecommerce-api:1.0 .'
             }
         }
+
+        stage('Push Image to Amazon ECR') {
+            steps {
+                withAWS(credentials: 'aws-ecr-credentials', region: 'ap-south-1') {
+                    script {
+                        def accountId = bat(
+                            script: '@"C:\\Program Files\\Amazon\\AWSCLIV2\\aws.exe" sts get-caller-identity --query Account --output text',
+                            returnStdout: true
+                        ).trim()
+
+                        def registry = "${accountId}.dkr.ecr.ap-south-1.amazonaws.com"
+                        def image = "${registry}/ecommerce-api:1.0"
+
+                        bat """
+                            "C:\\Users\\soush\\AppData\\Local\\Programs\\DockerDesktop\\resources\\bin\\docker.exe" tag ecommerce-api:1.0 ${image}
+                        """
+
+                        bat """
+                            "C:\\Program Files\\Amazon\\AWSCLIV2\\aws.exe" ecr get-login-password --region ap-south-1 | "C:\\Users\\soush\\AppData\\Local\\Programs\\DockerDesktop\\resources\\bin\\docker.exe" login --username AWS --password-stdin ${registry}
+                        """
+
+                        bat """
+                            "C:\\Users\\soush\\AppData\\Local\\Programs\\DockerDesktop\\resources\\bin\\docker.exe" push ${image}
+                        """
+                    }
+                }
+            }
+        }
     }
 }
