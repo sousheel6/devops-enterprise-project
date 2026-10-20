@@ -46,6 +46,17 @@ pipeline {
                         """
                     }
                 }
+
+stage('Deploy to EKS') {
+    steps {
+        bat '''
+            aws eks update-kubeconfig --name devops-enterprise-cluster --region ap-south-1
+            kubectl set image deployment/ecommerce-api ecommerce-api=227769753769.dkr.ecr.ap-south-1.amazonaws.com/ecommerce-api:1.0
+            kubectl rollout status deployment/ecommerce-api --timeout=180s
+        '''
+    }
+}
+
             }
         }
     }
