@@ -46,15 +46,6 @@ stage('Run Tests') {
     }
 }
 
-
-        stage('Build Docker Image') {
-            steps {
-                bat '''
-                    docker build -t %ECR_REPOSITORY%:%BUILD_NUMBER% .
-                    docker tag %ECR_REPOSITORY%:%BUILD_NUMBER% %AWS_ACCOUNT_ID%.dkr.ecr.%AWS_REGION%.amazonaws.com/%ECR_REPOSITORY%:%BUILD_NUMBER%
-                '''
-            }
-        }
 stage('Build Docker Image') {
     steps {
         bat '''
