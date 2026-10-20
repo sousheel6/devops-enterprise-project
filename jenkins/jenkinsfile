@@ -75,7 +75,14 @@ stage('Login to Amazon ECR') {
         }
     }
 }
-
+stage('Push Docker Image to ECR') {
+    steps {
+        bat '''
+            docker push %AWS_ACCOUNT_ID%.dkr.ecr.%AWS_REGION%.amazonaws.com/%ECR_REPOSITORY%:%BUILD_NUMBER%
+            if errorlevel 1 exit /b 1
+        '''
+    }
+}
 
 stage('Configure EKS Access') {
     steps {
