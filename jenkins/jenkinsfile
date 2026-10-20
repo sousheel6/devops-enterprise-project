@@ -24,23 +24,28 @@ pipeline {
             }
         }
 
-        stage('Install Python Dependencies') {
-            steps {
-                bat '''
-                    python --version
-                    python -m pip install -r requirements.txt
-                    python -m pip install pytest
-                '''
-            }
-        }
+        
+stage('Install Python Dependencies') {
+    steps {
+        bat '''
+            python --version
+            python -m pip install --upgrade pip
+            python -m pip install flask pytest
+        '''
+    }
+}
 
-        stage('Run Tests') {
-            steps {
-                bat '''
-                    python -m pytest app/tests/ -v
-                '''
-            }
-        }
+
+   
+stage('Run Tests') {
+    steps {
+        bat '''
+            python -m pytest app/tests/ -v
+            if errorlevel 1 exit /b 1
+        '''
+    }
+}
+
 
         stage('Build Docker Image') {
             steps {
