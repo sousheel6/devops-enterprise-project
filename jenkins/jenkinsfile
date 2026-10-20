@@ -117,16 +117,28 @@ stage('Deploy to EKS') {
     }
 }
 
-        stage('Verify Deployment') {
-            steps {
-                bat '''
-                    kubectl get deployment %K8S_DEPLOYMENT%
-                    kubectl get pods -o wide
-                    kubectl get service ecommerce-api
-                '''
-            }
+    stage('Verify Deployment') {
+    steps {
+        withCredentials([
+            string(credentialsId: 'aws-access-key-id', variable: 'AWS_ACCESS_KEY_ID'),
+            string(credentialsId: 'aws-secret-access-key', variable: 'AWS_SECRET_ACCESS_KEY')
+        ]) {
+            bat '''
+                aws sts get-caller-identity
+                if errorlevel 1 exit /b 1
+
+                kubectl get deployment %K8S_DEPLOYMENT%
+                if errorlevel 1 exit /b 1
+
+                kubectl get pods -o wide
+                if errorlevel 1 exit /b 1
+
+                kubectl get service ecommerce-api
+                if errorlevel 1 exit /b 1
+            '''
         }
     }
+}
 
     post {
         success {
