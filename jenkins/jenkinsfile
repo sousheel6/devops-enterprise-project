@@ -58,42 +58,57 @@ stage('Build Docker Image') {
     }
 }
 
-        stage('Login to Amazon ECR') {
-            steps {
-                bat '''
-                    aws ecr get-login-password --region %AWS_REGION% | docker login --username AWS --password-stdin %AWS_ACCOUNT_ID%.dkr.ecr.%AWS_REGION%.amazonaws.com
-                '''
-            }
-        }
 
-        stage('Push Image to ECR') {
-            steps {
-                bat '''
-                    docker push %AWS_ACCOUNT_ID%.dkr.ecr.%AWS_REGION%.amazonaws.com/%ECR_REPOSITORY%:%BUILD_NUMBER%
-                '''
-            }
-        }
+stage('Login to Amazon ECR') {
+    steps {
+        withCredentials([
+            string(credentialsId: 'aws-access-key-id', variable: 'AWS_ACCESS_KEY_ID'),
+            string(credentialsId: 'aws-secret-access-key', variable: 'AWS_SECRET_ACCESS_KEY')
+        ]) {
+            bat '''
+                aws sts get-caller-identity
+                if errorlevel 1 exit /b 1
 
-        stage('Configure EKS Access') {
-            steps {
-                bat '''
-                    aws eks update-kubeconfig --name %EKS_CLUSTER% --region %AWS_REGION%
-                    kubectl config current-context
-                '''
-            }
+                aws ecr get-login-password --region %AWS_REGION% | docker login --username AWS --password-stdin %AWS_ACCOUNT_ID%.dkr.ecr.%AWS_REGION%.amazonaws.com
+                if errorlevel 1 exit /b 1
+            '''
         }
+    }
+}
 
-        stage('Deploy to EKS') {
-            steps {
-                bat '''
-                    kubectl set image deployment/%K8S_DEPLOYMENT% %K8S_CONTAINER%=%AWS_ACCOUNT_ID%.dkr.ecr.%AWS_REGION%.amazonaws.com/%ECR_REPOSITORY%:%BUILD_NUMBER%
-                    if errorlevel 1 exit /b 1
 
-                    kubectl rollout status deployment/%K8S_DEPLOYMENT% --timeout=180s
-                    if errorlevel 1 exit /b 1
-                '''
-            }
+stage('Configure EKS Access') {
+    steps {
+        withCredentials([
+            string(credentialsId: 'aws-access-key-id', variable: 'AWS_ACCESS_KEY_ID'),
+            string(credentialsId: 'aws-secret-access-key', variable: 'AWS_SECRET_ACCESS_KEY')
+        ]) {
+            bat '''
+                aws eks update-kubeconfig --name %EKS_CLUSTER% --region %AWS_REGION%
+                if errorlevel 1 exit /b 1
+
+                kubectl config current-context
+            '''
         }
+    }
+}
+
+stage('Deploy to EKS') {
+    steps {
+        withCredentials([
+            string(credentialsId: 'aws-access-key-id', variable: 'AWS_ACCESS_KEY_ID'),
+            string(credentialsId: 'aws-secret-access-key', variable: 'AWS_SECRET_ACCESS_KEY')
+        ]) {
+            bat '''
+                kubectl set image deployment/%K8S_DEPLOYMENT% %K8S_CONTAINER%=%AWS_ACCOUNT_ID%.dkr.ecr.%AWS_REGION%.amazonaws.com/%ECR_REPOSITORY%:%BUILD_NUMBER%
+                if errorlevel 1 exit /b 1
+
+                kubectl rollout status deployment/%K8S_DEPLOYMENT% --timeout=180s
+                if errorlevel 1 exit /b 1
+            '''
+        }
+    }
+}
 
         stage('Verify Deployment') {
             steps {
