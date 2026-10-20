@@ -1,63 +1,116 @@
+```groovy
 pipeline {
     agent any
+
+    options {
+        timestamps()
+        disableConcurrentBuilds()
+    }
+
+    environment {
+        AWS_REGION     = 'ap-south-1'
+        AWS_ACCOUNT_ID = '227769753769'
+        ECR_REPOSITORY = 'ecommerce-api'
+        EKS_CLUSTER    = 'devops-enterprise-cluster'
+        K8S_DEPLOYMENT = 'ecommerce-api'
+        K8S_CONTAINER  = 'ecommerce-api'
+    }
 
     stages {
         stage('Checkout Source') {
             steps {
-                echo 'Source code is available in the Jenkins workspace.'
-                bat 'dir'
+                checkout scm
+                echo 'Source code checked out successfully.'
             }
         }
 
-        stage('Check Docker') {
+        stage('Install Python Dependencies') {
             steps {
-                bat '"C:\\Users\\soush\\AppData\\Local\\Programs\\DockerDesktop\\resources\\bin\\docker.exe" --version'
+                bat '''
+                    python --version
+                    python -m pip install -r requirements.txt
+                    python -m pip install pytest
+                '''
             }
         }
 
-        stage('Build Application Image') {
+        stage('Run Tests') {
             steps {
-                bat '"C:\\Users\\soush\\AppData\\Local\\Programs\\DockerDesktop\\resources\\bin\\docker.exe" build -f docker/Dockerfile -t ecommerce-api:1.0 .'
+                bat '''
+                    python -m pytest app/tests/ -v
+                '''
             }
         }
 
-        stage('Push Image to Amazon ECR') {
+        stage('Build Docker Image') {
             steps {
-                withAWS(credentials: 'aws-ecr-credentials', region: 'ap-south-1') {
-                    script {
-                        def accountId = bat(
-                            script: '@"C:\\Program Files\\Amazon\\AWSCLIV2\\aws.exe" sts get-caller-identity --query Account --output text',
-                            returnStdout: true
-                        ).trim()
+                bat '''
+                    docker build -t %ECR_REPOSITORY%:%BUILD_NUMBER% .
+                    docker tag %ECR_REPOSITORY%:%BUILD_NUMBER% %AWS_ACCOUNT_ID%.dkr.ecr.%AWS_REGION%.amazonaws.com/%ECR_REPOSITORY%:%BUILD_NUMBER%
+                '''
+            }
+        }
 
-                        def registry = "${accountId}.dkr.ecr.ap-south-1.amazonaws.com"
-                        def image = "${registry}/ecommerce-api:1.0"
+        stage('Login to Amazon ECR') {
+            steps {
+                bat '''
+                    aws ecr get-login-password --region %AWS_REGION% | docker login --username AWS --password-stdin %AWS_ACCOUNT_ID%.dkr.ecr.%AWS_REGION%.amazonaws.com
+                '''
+            }
+        }
 
-                        bat """
-                            "C:\\Users\\soush\\AppData\\Local\\Programs\\DockerDesktop\\resources\\bin\\docker.exe" tag ecommerce-api:1.0 ${image}
-                        """
+        stage('Push Image to ECR') {
+            steps {
+                bat '''
+                    docker push %AWS_ACCOUNT_ID%.dkr.ecr.%AWS_REGION%.amazonaws.com/%ECR_REPOSITORY%:%BUILD_NUMBER%
+                '''
+            }
+        }
 
-                        bat """
-                            "C:\\Program Files\\Amazon\\AWSCLIV2\\aws.exe" ecr get-login-password --region ap-south-1 | "C:\\Users\\soush\\AppData\\Local\\Programs\\DockerDesktop\\resources\\bin\\docker.exe" login --username AWS --password-stdin ${registry}
-                        """
+        stage('Configure EKS Access') {
+            steps {
+                bat '''
+                    aws eks update-kubeconfig --name %EKS_CLUSTER% --region %AWS_REGION%
+                    kubectl config current-context
+                '''
+            }
+        }
 
-                        bat """
-                            "C:\\Users\\soush\\AppData\\Local\\Programs\\DockerDesktop\\resources\\bin\\docker.exe" push ${image}
-                        """
-                    }
-                }
+        stage('Deploy to EKS') {
+            steps {
+                bat '''
+                    kubectl set image deployment/%K8S_DEPLOYMENT% %K8S_CONTAINER%=%AWS_ACCOUNT_ID%.dkr.ecr.%AWS_REGION%.amazonaws.com/%ECR_REPOSITORY%:%BUILD_NUMBER%
+                    if errorlevel 1 exit /b 1
 
-stage('Deploy to EKS') {
-    steps {
-        bat '''
-            aws eks update-kubeconfig --name devops-enterprise-cluster --region ap-south-1
-            kubectl set image deployment/ecommerce-api ecommerce-api=227769753769.dkr.ecr.ap-south-1.amazonaws.com/ecommerce-api:1.0
-            kubectl rollout status deployment/ecommerce-api --timeout=180s
-        '''
+                    kubectl rollout status deployment/%K8S_DEPLOYMENT% --timeout=180s
+                    if errorlevel 1 exit /b 1
+                '''
+            }
+        }
+
+        stage('Verify Deployment') {
+            steps {
+                bat '''
+                    kubectl get deployment %K8S_DEPLOYMENT%
+                    kubectl get pods -o wide
+                    kubectl get service ecommerce-api
+                '''
+            }
+        }
+    }
+
+    post {
+        success {
+            echo 'SUCCESS: Tests passed, image pushed to ECR, and EKS deployment completed.'
+        }
+
+        failure {
+            echo 'FAILURE: Check Console Output for the failed stage and error.'
+        }
+
+        always {
+            echo 'Jenkins pipeline execution finished.'
+        }
     }
 }
-
-            }
-        }
-    }
-}
+```
